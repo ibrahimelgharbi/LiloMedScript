@@ -1,2 +1,0 @@
-# LiloMedScript
-Scripting Med transcript
