@@ -16,11 +16,11 @@ st.set_page_config(
 
 # Bandeau haut personnalisé
 st.markdown(
-    "<h3 style='text-align: center; color: #005b96;'>créé avec amour par ton fils chéri &lt;3</h3>",
+    "<h3 style='text-align: center; color: #005b96;'>Créé avec amour par ton fils chéri 💙</h3>",
     unsafe_allow_html=True
 )
 
-st.title("🎧 Lilo & Mamati – Application de transcription audio")
+st.title("🎧 Pour Mamati – Application de transcription audio")
 st.write(
     "Lilo, pourrais-tu déposer ici un audio de conférence médicale (staff, cours, transmission…) "
     "puis choisir ce que tu souhaites : **Transcription complète**, **Résumé & points clés**, "
