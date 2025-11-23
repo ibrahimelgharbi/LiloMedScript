@@ -15,7 +15,7 @@ st.set_page_config(
 )
 
 # Affichage du logo + titre
-logo_path = "lilomedscript_logo.png"  # à mettre dans le repo
+logo_path = "lilomedscript_logo.svg"  # à mettre dans le repo
 if os.path.exists(logo_path):
     col_logo, col_title = st.columns([1, 4])
     with col_logo:
