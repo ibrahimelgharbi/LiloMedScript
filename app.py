@@ -9,36 +9,29 @@ from openai import OpenAI
 # CONFIG STREAMLIT
 # -------------------------
 st.set_page_config(
-    page_title="LiloMedScript – Transcription & Résumé audio médical",
+    page_title="Transcription & Résumé audio médical",
     page_icon="🎧",
     layout="wide"
 )
 
-# Affichage du logo + titre
-logo_path = "lilomedscript_logo.svg"  # à mettre dans le repo
-if os.path.exists(logo_path):
-    col_logo, col_title = st.columns([1, 4])
-    with col_logo:
-        st.image(logo_path, width=80)
-    with col_title:
-        st.title("LiloMedScript")
-else:
-    st.title("LiloMedScript")
-
-st.write(
-    "🎧 Application de transcription et de synthèse d'audios médicaux.\n\n"
-    "Uploade un audio (conférence, staff, cours...) puis choisis le type de sortie : "
-    "**Transcription complète**, **Résumé & points clés**, ou **Slides PowerPoint**."
+# Bandeau haut personnalisé
+st.markdown(
+    "<h3 style='text-align: center; color: #005b96;'>créé avec amour par ton fils chéri &lt;3</h3>",
+    unsafe_allow_html=True
 )
 
-st.markdown("---")
+st.title("🎧 Lilo & Mamati – Application de transcription audio")
+st.write(
+    "Lilo, pourrais-tu déposer ici un audio de conférence médicale (staff, cours, transmission…) "
+    "puis choisir ce que tu souhaites : **Transcription complète**, **Résumé & points clés**, "
+    "ou **Slides PowerPoint**. Pensée spéciale pour Mamati 💙."
+)
 
 # -------------------------
 # CONFIG OPENAI (API KEY VIA SECRETS)
 # -------------------------
-# Dans Streamlit Cloud, tu définiras st.secrets[\"OPENAI_API_KEY\"]
 if "OPENAI_API_KEY" not in st.secrets:
-    st.error("⚠️ Clé API OpenAI manquante. Ajoute-la dans les secrets Streamlit.")
+    st.error("⚠️ Clé API OpenAI manquante. Ajoute-la dans les secrets Streamlit (OPENAI_API_KEY).")
     st.stop()
 
 client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
@@ -48,33 +41,34 @@ client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 # -------------------------
 def transcribe_audio(uploaded_file) -> str:
     """
-    Transcrit un fichier audio en texte avec gpt-4o-mini-transcribe.
-    Les données restent côté OpenAI, Streamlit Cloud gère juste l'interface.
+    Transcrit un fichier audio en texte avec le modèle 'whisper-1'
+    (permet des durées plus longues que gpt-4o-mini-transcribe).
     """
-    # On écrit le fichier uploadé dans un fichier temporaire
-    suffix = os.path.splitext(uploaded_file.name)[1]
+    suffix = os.path.splitext(uploaded_file.name)[1] or ".mp3"
     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
         tmp.write(uploaded_file.read())
         tmp_path = tmp.name
 
-    with open(tmp_path, "rb") as audio_file:
-        transcription = client.audio.transcriptions.create(
-            # Modèle de transcription optimisé
-            model="gpt-4o-mini-transcribe",
-            file=audio_file,
-            language="fr",  # force le FR, adapte si besoin
-        )
+    try:
+        with open(tmp_path, "rb") as audio_file:
+            transcription = client.audio.transcriptions.create(
+                model="whisper-1",   # ✅ modèle sans limite stricte à 1400s
+                file=audio_file,
+                language="fr",       # français
+            )
+        text = transcription.text
+    finally:
+        # On nettoie le fichier temporaire
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
 
-    # On supprime le fichier temporaire
-    os.remove(tmp_path)
-
-    return transcription.text
+    return text
 
 
 def summarize_text(transcript: str) -> str:
     """Produit un résumé structuré de la transcription."""
     prompt = f"""
-Tu es un médecin spécialiste qui résume des conférences médicales pour des internes.
+Tu es un médecin spécialiste qui résume des conférences médicales pour Lilo et Mamati.
 
 Écris un résumé clair et structuré de la conférence ci-dessous.
 
@@ -83,14 +77,14 @@ Contraintes :
 - Commence par un résumé global en 5–10 lignes.
 - Puis une section "Points clés" sous forme de bullet points.
 - Puis une section "Implications pratiques pour la clinique" si pertinent (bullet points).
-- Style : concis, pédagogique, pas de blabla inutile.
+- Style : concis, pédagogique, sans phrases inutiles.
 
 Transcription :
 \"\"\"{transcript}\"\"\"
 """
 
     response = client.responses.create(
-        model="gpt-5-nano",  # modèle léger et économique
+        model="gpt-5-nano",
         input=[
             {
                 "role": "user",
@@ -107,7 +101,7 @@ def generate_slides_markdown(transcript: str) -> str:
     Demande au modèle une structure de diaporama en Markdown.
     """
     prompt = f"""
-À partir de cette transcription d'une conférence médicale, propose une structure de diaporama (PowerPoint) en français.
+À partir de cette transcription d'une conférence médicale, propose une structure de diaporama (PowerPoint) pour Lilo et Mamati, en français.
 
 Contraintes :
 - Entre 5 et 10 diapositives.
@@ -122,7 +116,7 @@ Contraintes :
   - Point 2
   etc.
 
-- La première diapositive doit être un titre général (pas de puces).
+- La première diapositive doit être un titre général (sans puces).
 - Les autres : objectifs, notions clés, physiopathologie, aspects cliniques, traitement, messages à retenir, conclusion.
 
 Transcription :
@@ -155,7 +149,7 @@ def markdown_to_pptx(md: str, output_path: str):
         # Titre principal "# ..."
         if line.startswith("# ") and not line.startswith("##"):
             title_text = line[2:].strip()
-            slide = prs.slides.add_slide(prs.slide_layouts[0])  # Titre seul
+            slide = prs.slides.add_slide(prs.slide_layouts[0])  # Titre
             slide.shapes.title.text = title_text
             continue
 
@@ -187,12 +181,12 @@ def markdown_to_pptx(md: str, output_path: str):
 # UI STREAMLIT
 # -------------------------
 uploaded_file = st.file_uploader(
-    "Dépose ton fichier audio (mp3, wav, m4a, mp4…)",
+    "Lilo, pourrais-tu déposer ici ton fichier audio (mp3, wav, m4a, mp4…) ?",
     type=["mp3", "wav", "m4a", "mp4"]
 )
 
 mode = st.radio(
-    "Choisis le type de sortie :",
+    "Que veux-tu que l'application fasse pour toi, Lilo ?",
     [
         "Retranscription complète",
         "Résumé + points clés",
@@ -200,27 +194,28 @@ mode = st.radio(
     ]
 )
 
-with st.expander("ℹ️ Conseils pour les audios longs (≈30 minutes)"):
+with st.expander("ℹ️ Conseils pour les audios longs (≈ 25–30 minutes)"):
     st.write(
-        "- Préfère des fichiers compressés (mp3) plutôt que wav.\n"
-        "- Le traitement (transcription + résumé/slides) se fait côté API OpenAI.\n"
-        "- Pour des très longues conférences, on pourra ensuite ajouter un découpage en plusieurs morceaux."
+        "- Lilo, pour des audios longs, privilégie si possible un format compressé (mp3).\n"
+        "- Le traitement se fait côté OpenAI, donc même si l'audio est un peu long, "
+        "l'application restera fluide pour toi et Mamati.\n"
+        "- Si un jour un fichier est vraiment très long, on pourra envisager un découpage automatique."
     )
 
 if uploaded_file is not None:
     st.audio(uploaded_file, format="audio/mp3")
+    st.success("Merci Lilo 💙, l'audio est bien déposé. Choisis ce que tu veux en faire, puis lance le traitement.")
 
     if st.button("🚀 Lancer le traitement", type="primary"):
         try:
-            with st.spinner("Transcription en cours…"):
+            with st.spinner("Lilo, je transcris l'audio pour toi…"):
                 transcript = transcribe_audio(uploaded_file)
 
             if mode == "Retranscription complète":
                 st.subheader("📝 Transcription complète")
                 st.text_area("Texte transcrit", transcript, height=400)
 
-                # Fichier texte à télécharger
-                txt_path = "LiloMedScript_transcription.txt"
+                txt_path = "transcription.txt"
                 with open(txt_path, "w", encoding="utf-8") as f:
                     f.write(transcript)
 
@@ -228,18 +223,18 @@ if uploaded_file is not None:
                     st.download_button(
                         "📥 Télécharger la transcription (.txt)",
                         data=f,
-                        file_name="LiloMedScript_transcription.txt",
+                        file_name="transcription.txt",
                         mime="text/plain"
                     )
 
             elif mode == "Résumé + points clés":
-                with st.spinner("Génération du résumé…"):
+                with st.spinner("Lilo, je prépare le résumé et les points clés…"):
                     summary = summarize_text(transcript)
 
-                st.subheader("🧾 Résumé & points clés")
+                st.subheader("🧾 Résumé & points clés pour Lilo et Mamati")
                 st.markdown(summary)
 
-                txt_path = "LiloMedScript_resume_points_cles.txt"
+                txt_path = "resume_points_cles.txt"
                 with open(txt_path, "w", encoding="utf-8") as f:
                     f.write(summary)
 
@@ -247,26 +242,26 @@ if uploaded_file is not None:
                     st.download_button(
                         "📥 Télécharger le résumé (.txt)",
                         data=f,
-                        file_name="LiloMedScript_resume_points_cles.txt",
+                        file_name="resume_points_cles.txt",
                         mime="text/plain"
                     )
 
             elif mode == "Génération de slides (PPTX)":
-                with st.spinner("Génération de la structure de slides…"):
+                with st.spinner("Lilo, je génère la structure des slides pour ta conférence…"):
                     slides_md = generate_slides_markdown(transcript)
 
                 st.subheader("📑 Structure des slides (Markdown généré)")
                 st.markdown(slides_md)
 
-                pptx_path = "LiloMedScript_conference_medicale.pptx"
-                with st.spinner("Création du fichier PowerPoint…"):
+                pptx_path = "conference_medicale_lilo_mamati.pptx"
+                with st.spinner("Je crée le fichier PowerPoint pour toi, Lilo…"):
                     markdown_to_pptx(slides_md, pptx_path)
 
                 with open(pptx_path, "rb") as f:
                     st.download_button(
                         "📥 Télécharger le diaporama (.pptx)",
                         data=f,
-                        file_name="LiloMedScript_conference_medicale.pptx",
+                        file_name="conference_medicale_lilo_mamati.pptx",
                         mime=(
                             "application/"
                             "vnd.openxmlformats-officedocument.presentationml.presentation"
@@ -275,5 +270,6 @@ if uploaded_file is not None:
 
         except Exception as e:
             st.error(f"❌ Erreur lors du traitement : {e}")
+            st.info("Si l'erreur persiste, envoie-moi un screen et on adaptera ensemble 💙.")
 else:
-    st.info("⬆️ Uploade un fichier audio pour commencer.")
+    st.info("Lilo, pourrais-tu déposer un fichier audio pour commencer ?")
