@@ -3,6 +3,7 @@ import tempfile
 
 import streamlit as st
 from pptx import Presentation
+from pptx.dml.color import RGBColor
 from openai import OpenAI
 
 # -------------------------
@@ -16,15 +17,16 @@ st.set_page_config(
 
 # Bandeau haut personnalisé
 st.markdown(
-    "<h3 style='text-align: center; color: #005b96;'>Créé avec amour par ton fils chéri 💙</h3>",
+    "<h3 style='text-align: center; color: #005b96;'>Créée avec amour par ton fils chéri &lt;3</h3>",
     unsafe_allow_html=True
 )
 
-st.title("🎧 Pour Mamati – Application de transcription audio")
+st.title("🎧 LiloScript – Application de transcription audio")
 st.write(
-    "Lilo, pourrais-tu déposer ici un audio de conférence médicale (staff, cours, transmission…) "
-    "puis choisir ce que tu souhaites : **Transcription complète**, **Résumé & points clés**, "
-    "ou **Slides PowerPoint**. Pensée spéciale pour Mamati 💙."
+    "Lilo, pourrais-tu déposer ici un audio de conférence médicale "
+    "(staff, cours, transmission…) puis choisir ce que tu souhaites : "
+    "**Transcription complète**, **Résumé & points clés**, ou **Slides PowerPoint**. "
+    "Je vous aime fort, Nhebek 💙."
 )
 
 # -------------------------
@@ -41,8 +43,8 @@ client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 # -------------------------
 def transcribe_audio(uploaded_file) -> str:
     """
-    Transcrit un fichier audio en texte avec le modèle 'whisper-1'
-    (permet des durées plus longues que gpt-4o-mini-transcribe).
+    Transcrit un fichier audio en texte avec le modèle 'whisper-1',
+    adapté aux durées longues (≈ 25–30 minutes).
     """
     suffix = os.path.splitext(uploaded_file.name)[1] or ".mp3"
     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
@@ -52,13 +54,12 @@ def transcribe_audio(uploaded_file) -> str:
     try:
         with open(tmp_path, "rb") as audio_file:
             transcription = client.audio.transcriptions.create(
-                model="whisper-1",   # ✅ modèle sans limite stricte à 1400s
+                model="whisper-1",
                 file=audio_file,
-                language="fr",       # français
+                language="fr",
             )
         text = transcription.text
     finally:
-        # On nettoie le fichier temporaire
         if os.path.exists(tmp_path):
             os.remove(tmp_path)
 
@@ -66,9 +67,14 @@ def transcribe_audio(uploaded_file) -> str:
 
 
 def summarize_text(transcript: str) -> str:
-    """Produit un résumé structuré de la transcription."""
+    """
+    Produit un résumé structuré de la transcription.
+    On laisse le modèle compléter et étayer avec ses connaissances médicales
+    si certains points sont implicites dans le texte.
+    """
     prompt = f"""
-Tu es un médecin spécialiste qui résume des conférences médicales pour Lilo et Mamati.
+Tu es un médecin spécialiste qui résume des conférences médicales pour des cliniciens
+et des internes.
 
 Écris un résumé clair et structuré de la conférence ci-dessous.
 
@@ -78,6 +84,8 @@ Contraintes :
 - Puis une section "Points clés" sous forme de bullet points.
 - Puis une section "Implications pratiques pour la clinique" si pertinent (bullet points).
 - Style : concis, pédagogique, sans phrases inutiles.
+- Tu peux t'appuyer sur tes connaissances médicales à jour pour préciser ou clarifier
+  certains points, tant que tu restes cohérent avec la transcription.
 
 Transcription :
 \"\"\"{transcript}\"\"\"
@@ -99,9 +107,12 @@ Transcription :
 def generate_slides_markdown(transcript: str) -> str:
     """
     Demande au modèle une structure de diaporama en Markdown.
+    Slides professionnelles, sans mention de Lilo/Mamati.
+    Le modèle peut compléter avec ses connaissances médicales si besoin.
     """
     prompt = f"""
-À partir de cette transcription d'une conférence médicale, propose une structure de diaporama (PowerPoint) pour Lilo et Mamati, en français.
+À partir de cette transcription d'une conférence médicale, propose une structure de
+diaporama (PowerPoint) professionnelle en français.
 
 Contraintes :
 - Entre 5 et 10 diapositives.
@@ -117,7 +128,12 @@ Contraintes :
   etc.
 
 - La première diapositive doit être un titre général (sans puces).
-- Les autres : objectifs, notions clés, physiopathologie, aspects cliniques, traitement, messages à retenir, conclusion.
+- Les autres diapositives peuvent couvrir : contexte, objectifs, physiopathologie,
+  données cliniques, examens complémentaires, prise en charge, messages à retenir,
+  conclusion.
+- Le ton doit être professionnel, adapté à un support de FMC / staff hospitalier.
+- Tu peux utiliser tes connaissances médicales à jour pour compléter ou clarifier
+  certains points, tant que tu restes cohérent avec la transcription.
 
 Transcription :
 \"\"\"{transcript}\"\"\"
@@ -136,9 +152,20 @@ Transcription :
     return response.output_text
 
 
+def set_blue_background(slide):
+    """
+    Applique un fond bleu simple à une diapositive (thème pro).
+    """
+    bg = slide.background
+    fill = bg.fill
+    fill.solid()
+    fill.fore_color.rgb = RGBColor(0, 91, 150)  # bleu proche du thème Streamlit
+
+
 def markdown_to_pptx(md: str, output_path: str):
     """
-    Transforme une structure de slides en Markdown en un fichier PPTX simple.
+    Transforme une structure de slides en Markdown en un fichier PPTX simple
+    avec fond bleu.
     """
     prs = Presentation()
     lines = [l.strip() for l in md.splitlines() if l.strip()]
@@ -150,6 +177,7 @@ def markdown_to_pptx(md: str, output_path: str):
         if line.startswith("# ") and not line.startswith("##"):
             title_text = line[2:].strip()
             slide = prs.slides.add_slide(prs.slide_layouts[0])  # Titre
+            set_blue_background(slide)
             slide.shapes.title.text = title_text
             continue
 
@@ -157,6 +185,7 @@ def markdown_to_pptx(md: str, output_path: str):
         if line.startswith("## "):
             slide_title = line[3:].strip()
             slide = prs.slides.add_slide(prs.slide_layouts[1])  # Titre + contenu
+            set_blue_background(slide)
             slide.shapes.title.text = slide_title
             body = slide.placeholders[1]
             bullet_frame = body.text_frame
@@ -181,12 +210,12 @@ def markdown_to_pptx(md: str, output_path: str):
 # UI STREAMLIT
 # -------------------------
 uploaded_file = st.file_uploader(
-    "Lilo, pourrais-tu déposer ici ton fichier audio (mp3, wav, m4a, mp4…) ?",
+    "Lilo ou Mamati, pourrais-tu déposer ici ton fichier audio (mp3, wav, m4a, mp4…) ?",
     type=["mp3", "wav", "m4a", "mp4"]
 )
 
 mode = st.radio(
-    "Que veux-tu que l'application fasse pour toi, Lilo ?",
+    "Que veux-tu que l'application fasse pour toi ?",
     [
         "Retranscription complète",
         "Résumé + points clés",
@@ -196,20 +225,39 @@ mode = st.radio(
 
 with st.expander("ℹ️ Conseils pour les audios longs (≈ 25–30 minutes)"):
     st.write(
-        "- Lilo, pour des audios longs, privilégie si possible un format compressé (mp3).\n"
+        "- Pour des audios longs, privilégie si possible un format compressé (mp3).\n"
         "- Le traitement se fait côté OpenAI, donc même si l'audio est un peu long, "
-        "l'application restera fluide pour toi et Mamati.\n"
-        "- Si un jour un fichier est vraiment très long, on pourra envisager un découpage automatique."
+        "l'application restera fluide.\n"
+        "- Si un jour un fichier est vraiment très long, on pourra envisager un découpage automatique.\n\n"
+        "Je t'aime 💙."
     )
+
+# Initialisation de l'état de session pour optimiser les coûts
+if "transcript" not in st.session_state:
+    st.session_state["transcript"] = None
+    st.session_state["last_file_name"] = None
 
 if uploaded_file is not None:
     st.audio(uploaded_file, format="audio/mp3")
-    st.success("Merci Lilo 💙, l'audio est bien déposé. Choisis ce que tu veux en faire, puis lance le traitement.")
+    st.success(
+        "Merci Lilo 💙, l'audio est bien déposé. "
+        "Choisis ce que tu veux en faire, puis lance le traitement."
+    )
 
     if st.button("🚀 Lancer le traitement", type="primary"):
         try:
-            with st.spinner("Lilo, je transcris l'audio pour toi…"):
-                transcript = transcribe_audio(uploaded_file)
+            # ✅ Optimisation des coûts :
+            # On ne re-transcrit pas si le même fichier a déjà été traité.
+            if (
+                st.session_state["transcript"] is None
+                or st.session_state["last_file_name"] != uploaded_file.name
+            ):
+                with st.spinner("Je transcris l'audio pour toi…"):
+                    transcript = transcribe_audio(uploaded_file)
+                    st.session_state["transcript"] = transcript
+                    st.session_state["last_file_name"] = uploaded_file.name
+            else:
+                transcript = st.session_state["transcript"]
 
             if mode == "Retranscription complète":
                 st.subheader("📝 Transcription complète")
@@ -228,10 +276,10 @@ if uploaded_file is not None:
                     )
 
             elif mode == "Résumé + points clés":
-                with st.spinner("Lilo, je prépare le résumé et les points clés…"):
+                with st.spinner("Je prépare le résumé et les points clés…"):
                     summary = summarize_text(transcript)
 
-                st.subheader("🧾 Résumé & points clés pour Lilo et Mamati")
+                st.subheader("🧾 Résumé & points clés")
                 st.markdown(summary)
 
                 txt_path = "resume_points_cles.txt"
@@ -247,21 +295,21 @@ if uploaded_file is not None:
                     )
 
             elif mode == "Génération de slides (PPTX)":
-                with st.spinner("Lilo, je génère la structure des slides pour ta conférence…"):
+                with st.spinner("Je génère la structure des slides…"):
                     slides_md = generate_slides_markdown(transcript)
 
                 st.subheader("📑 Structure des slides (Markdown généré)")
                 st.markdown(slides_md)
 
-                pptx_path = "conference_medicale_lilo_mamati.pptx"
-                with st.spinner("Je crée le fichier PowerPoint pour toi, Lilo…"):
+                pptx_path = "conference_medicale_pro.pptx"
+                with st.spinner("Je crée le fichier PowerPoint (fond bleu pro)…"):
                     markdown_to_pptx(slides_md, pptx_path)
 
                 with open(pptx_path, "rb") as f:
                     st.download_button(
                         "📥 Télécharger le diaporama (.pptx)",
                         data=f,
-                        file_name="conference_medicale_lilo_mamati.pptx",
+                        file_name="conference_medicale_pro.pptx",
                         mime=(
                             "application/"
                             "vnd.openxmlformats-officedocument.presentationml.presentation"
@@ -270,6 +318,9 @@ if uploaded_file is not None:
 
         except Exception as e:
             st.error(f"❌ Erreur lors du traitement : {e}")
-            st.info("Si l'erreur persiste, envoie-moi un screen et on adaptera ensemble 💙.")
+            st.info(
+                "Si l'erreur persiste, fais une capture d'écran et on ajustera ensemble. "
+                "Nhebek 💙."
+            )
 else:
-    st.info("Lilo, pourrais-tu déposer un fichier audio pour commencer ?")
+    st.info("Mamati, pourrais-tu déposer un fichier audio pour commencer ?")
